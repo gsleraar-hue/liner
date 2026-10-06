@@ -61,6 +61,9 @@ async function runInPage(url, source) {
     reader = new BrowserWindow({ show: false, width: 800, height: 800, useContentSize: true, webPreferences: { offscreen: true, backgroundThrottling: false } });
     reader.webContents.setFrameRate(10);
     reader.webContents.setAudioMuted(true);
+    // if a page crashes this window, throw it away; the next page gets a fresh one
+    const r = reader;
+    r.webContents.on('render-process-gone', (e, d) => { logError('reader', `${d.reason} (exit ${d.exitCode})`); if (!r.isDestroyed()) r.destroy(); if (reader === r) reader = null; });
   }
   const wc = reader.webContents;
   let onLoad, onFail, t;
@@ -409,5 +412,24 @@ app.whenReady().then(() => {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   setupUpdater();
   win.on('closed', () => { win = null; if (job) job.cancel(); app.quit(); });
+  // A crashed or frozen page: log it, and bring the window back instead of leaving it blank.
+  win.webContents.on('render-process-gone', (e, d) => {
+    logError('window', `${d.reason} (exit ${d.exitCode})`);
+    if (d.reason !== 'clean-exit' && win && !win.isDestroyed()) win.reload();
+  });
+  win.on('unresponsive', () => logError('window', 'not responding'));
+  win.webContents.on('console-message', (e, level, message, line, source) => { if (level >= 3) logError('page', `${message} (${source}:${line})`); });
+  // The hidden reader window loads outside pages; if one of those crashes, start a fresh one next time.
+  app.on('child-process-gone', (e, d) => logError('process', `${d.type}: ${d.reason} (exit ${d.exitCode})`));
 });
+
+// Anything that goes wrong is written to %APPDATA%\Liner\fouten.log, so a crash can be traced afterwards.
+function logError(where, what) {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'fouten.log'), `${new Date().toISOString()} [${app.getVersion()}] ${where}: ${what}\n`); } catch (e) {}
+}
+process.on('uncaughtException', err => {
+  logError('main', err && err.stack || String(err));
+  if (win && !win.isDestroyed()) dialog.showMessageBox(win, { type: 'error', title: 'Liner', message: 'Er ging iets mis', detail: String(err && err.message || err) + '\n\nDe details staan in fouten.log in %APPDATA%\\Liner.' }).catch(() => {});
+});
+process.on('unhandledRejection', err => logError('main', 'unhandled: ' + (err && err.stack || String(err))));
 app.on('window-all-closed', () => { if (!process.argv.includes('--smoke') && !process.argv.includes('--analyze')) app.quit(); });
