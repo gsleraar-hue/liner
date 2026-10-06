@@ -84,7 +84,7 @@ L.onProgress(p => {
   const next = { 'stemmen en muziek': 0.75, 'mixen': 0.92 }[p.phase] ?? base;
   const frac = p.total ? base + (next - base) * (p.done / p.total) : base;
   $('#stBar').style.width = Math.min(100, ((p.chapter || 0) + frac) * per * 100 * (total > 1 || p.chapters > 1 ? 1 : 1)) + '%';
-  const count = p.total && p.phase === 'stemmen en muziek' ? ` (${p.done}/${p.total})` : '';
+  const count = p.total && (p.phase === 'stemmen en muziek' || p.phase === 'ontbrekende fragmenten zoeken') ? ` (${p.done}/${p.total})` : '';
   showStatus(p.title ? `${p.label} · ${p.title}` : p.label, p.phase + count + '…');
   book && book.chapters.forEach(c => c.li && c.li.classList.remove('busy'));
   const cur = currentRun[p.chapter];

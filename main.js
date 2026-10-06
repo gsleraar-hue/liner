@@ -7,6 +7,7 @@ const { scanIndexSource, extractChapterSource, squareCoverSource } = require('./
 const { Renderer } = require('./lib/render');
 const tts = require('./lib/edge-tts');
 const language = require('./lib/language');
+const { findPreview } = require('./lib/itunes');
 
 const DEFAULTS = {
   url: 'https://sorock.nl/',
@@ -170,6 +171,19 @@ async function renderChapter(r, ch, i, n, opts, book, tmp, extra = {}) {
   if (!data || !data.segs || data.segs.length < 2) throw new Error('Geen leesbare tekst gevonden op ' + ch.url);
   const title = data.kicker ? `${data.kicker}: ${data.title}` : (data.title || ch.title);
   r.onProgress = p => send('progress', { label, title, phase: p.phase, done: p.done, total: p.total, chapter: i, chapters: n });
+  // Listening tips the site has no clip for: look for a 30-second preview on iTunes.
+  const missing = data.segs.filter(s => s.kind === 'tip' && !s.track && s.want && s.want.artist && s.want.title);
+  if (missing.length) {
+    const cacheFile = path.join(app.getPath('userData'), 'cache', 'itunes.json');
+    let found = 0;
+    for (let k = 0; k < missing.length; k++) {
+      r.check();
+      send('progress', { label, title, phase: 'ontbrekende fragmenten zoeken', done: k, total: missing.length, chapter: i, chapters: n });
+      try { const t = await findPreview(missing[k].want, cacheFile); if (t) { missing[k].track = t; found++; } }
+      catch (e) { logError('itunes', e.message); }
+    }
+    send('log', `${title}: ${found} van ${missing.length} ontbrekende fragmenten gevonden via iTunes`);
+  }
   const nTips = data.segs.filter(s => s.kind === 'tip' && s.track).length;
   attachLanguage(data, ch.url, opts);
   // cover for this chapter: the page header, otherwise the background photo
