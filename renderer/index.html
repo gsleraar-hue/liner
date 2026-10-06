@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' file:; img-src 'self' data:; style-src 'self'">
+<title>Liner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i></span><div><h1>Liner</h1><p>Van website naar luisterboek, met de muziek erbij</p></div></div>
+  <form id="scanForm" class="urlbar">
+    <input id="url" type="url" placeholder="https://…" spellcheck="false" required>
+    <button class="btn" type="submit" id="scanBtn">Ophalen</button>
+  </form>
+  <div class="update" id="update" hidden><span id="updateText"></span><button type="button" class="btn small" id="updateBtn" hidden>Nu herstarten</button></div>
+</header>
+
+<main class="grid">
+  <section class="card book">
+    <h2>Boek</h2>
+    <div class="row2">
+      <label>Titel<input id="title"></label>
+      <label>Auteur<input id="author"></label>
+    </div>
+    <label>Ondertitel<input id="subtitle"></label>
+
+    <div class="chapHead">
+      <h2>Hoofdstukken <span id="chapCount" class="muted"></span></h2>
+      <div class="links"><button type="button" class="link" id="all">alles</button><button type="button" class="link" id="none">niets</button></div>
+    </div>
+    <ol id="chapters" class="chapters"><li class="empty">Vul een adres in en klik op Ophalen.</li></ol>
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <h2>Stem</h2>
+      <label>Verteller<select id="voice"></select></label>
+      <label class="check"><input type="checkbox" id="englishVoice"> Engelse namen en titels met een Engelse stem</label>
+      <label class="indent">Stem voor Engelse namen<select id="voiceNames"></select></label>
+      <label>Engelse citaten<select id="voiceEn"></select></label>
+      <div class="row2">
+        <label>Tempo<select id="rate"><option value="0.9">0,9×</option><option value="1">1×</option><option value="1.1">1,1×</option><option value="1.2">1,2×</option><option value="1.3">1,3×</option></select></label>
+        <div class="end"><button type="button" class="btn ghost" id="sample">Beluister stem</button></div>
+      </div>
+      <label class="check"><input type="checkbox" id="quotes"> Citaten voorlezen</label>
+      <label class="check"><input type="checkbox" id="tipsRead"> Luistertips aankondigen</label>
+      <button type="button" class="btn ghost wide" id="lexOpen">Uitspraak aanpassen…</button>
+    </section>
+
+    <section class="card">
+      <h2>Muziek</h2>
+      <label class="check"><input type="checkbox" id="fragments"> Fragment spelen als het over dat nummer gaat</label>
+      <label class="slider">Lengte fragment <input type="range" id="fragLen" min="8" max="30" step="1"><output id="fragLenOut"></output></label>
+      <label class="check"><input type="checkbox" id="bed"> Zacht onder de stem</label>
+      <label class="slider">Volume eronder <input type="range" id="bedVolume" min="0.1" max="1" step="0.05"><output id="bedVolumeOut"></output></label>
+      <label class="check"><input type="checkbox" id="transitions"> Muziek tussen hoofdstukken</label>
+      <label class="check"><input type="checkbox" id="introOutro"> Intro en outro</label>
+    </section>
+
+    <section class="card">
+      <h2>Opslaan</h2>
+      <label class="check"><input type="checkbox" id="saveBook"> Eén bestand (.m4b met hoofdstukken)</label>
+      <label class="check"><input type="checkbox" id="saveChapters"> Losse hoofdstukken (mp3, elk met eigen cover)</label>
+      <div class="folder"><span id="outDir" class="path"></span><button type="button" class="link" id="pick">wijzig</button></div>
+      <button type="button" class="btn big" id="build" disabled>Maak luisterboek</button>
+    </section>
+  </aside>
+</main>
+
+<footer class="status" id="status" hidden>
+  <div class="statusMain">
+    <div class="statusText"><strong id="stLabel"></strong> <span id="stPhase" class="muted"></span></div>
+    <div class="bar"><i id="stBar"></i></div>
+  </div>
+  <audio id="player" controls hidden></audio>
+  <div class="statusBtns">
+    <button type="button" class="btn ghost" id="logBtn">Logboek</button>
+    <button type="button" class="btn ghost" id="cancel">Stoppen</button>
+    <button type="button" class="btn" id="reveal" hidden>Toon bestand</button>
+  </div>
+  <pre id="log" class="log" hidden></pre>
+</footer>
+
+<dialog id="lexDlg" class="lex">
+  <div class="lexHead">
+    <div><h2>Uitspraak</h2><p class="muted">Hoe de stem een woord zegt. Schrijf het zoals de stem het moet uitspreken en luister met ▶. Jouw aanpassingen gaan voor op de lijst van de site.</p></div>
+    <button type="button" class="link" id="lexClose">sluiten</button>
+  </div>
+  <div class="lexBar">
+    <input id="lexSearch" placeholder="Zoek een woord, bijv. McCartney" spellcheck="false">
+    <button type="button" class="btn ghost" id="lexAdd">Nieuw woord</button>
+  </div>
+  <div class="lexRows" id="lexRows"></div>
+  <div class="lexFoot muted" id="lexFoot"></div>
+  <audio id="lexAudio" hidden></audio>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

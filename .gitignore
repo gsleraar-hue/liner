@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/cache/
+# Third-party word lists with licences that do not allow redistribution (e-Lex: Dutch Language Union,
+# non-commercial, no redistribution; eSpeak NG list: GPL). They stay on the developer's machine.
+dev/e-lex/
+dev/espeak-nl_list.txt
+dev/anglicismen.txt
+lib/uitspraak-elex.json

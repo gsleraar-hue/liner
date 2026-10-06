@@ -1,0 +1,63 @@
+{
+  "name": "liner",
+  "productName": "Liner",
+  "version": "0.5.0",
+  "description": "Turns a website into an audiobook with free Microsoft neural voices (Dutch/Flemish), with the music fragments mixed in",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "author": "Jan-Wolter",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win nsis --publish never",
+    "icon": "node dev/make-icon.js",
+    "ffmpeg": "node dev/fetch-ffmpeg.js"
+  },
+  "build": {
+    "appId": "nl.gsleraar.liner",
+    "productName": "Liner",
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "renderer/**",
+      "build/icon.ico",
+      "build/icon.png",
+      "!lib/uitspraak-elex.json"
+    ],
+    "afterPack": "build/after-pack.js",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Liner-Setup-${version}.exe"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "gsleraar-hue",
+        "repo": "liner",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gsleraar-hue/liner.git"
+  },
+  "homepage": "https://github.com/gsleraar-hue/liner"
+}

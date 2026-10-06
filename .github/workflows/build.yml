@@ -1,0 +1,110 @@
+# Let GitHub build Liner and publish it as a release.
+#
+# The app updates itself from these releases (electron-updater reads latest.yml),
+# so every release must carry three files: the installer, its .blockmap (for
+# small differential downloads) and latest.yml.
+#
+# Two ways to start it:
+#   - by hand, through the Actions tab -> Build -> Run workflow (builds only)
+#   - by pushing a version tag:  npm version 0.5.0 --no-git-tag-version, commit,
+#     then  git tag v0.5.0 && git push origin v0.5.0   (builds and publishes)
+
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    env:
+      # A failed build must not drown in progress bars.
+      npm_config_progress: false
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Electron itself (over 100 MB) comes from a server that hands out the odd
+      # 504. Whatever was fetched once stays here.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Fetch packages
+        run: npm ci --no-audit --no-fund
+
+      # The tag and package.json must agree, or the updater compares the wrong
+      # version numbers and offers an update forever (or never).
+      - name: Check the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(node -p "require('./package.json').version")"
+          echo "tag: $want  package.json: $have"
+          test "$want" = "$have"
+
+      # Never let electron-builder publish by itself: it uploads files in
+      # parallel and can create two releases with the same tag. The release job
+      # below publishes everything in one go.
+      # If the download of Electron or ffmpeg stalls halfway, try again.
+      - name: Build
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            npx electron-builder --win nsis --publish never && exit 0
+            echo "attempt $attempt failed - waiting, then trying again"
+            sleep 30
+          done
+          exit 1
+
+      - name: What came out?
+        if: always()
+        shell: bash
+        run: ls -la dist/ || echo "no dist folder"
+
+      - name: Keep as a download
+        uses: actions/upload-artifact@v7
+        with:
+          name: liner-windows
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+
+  release:
+    needs: [windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Collect the build
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: What are we publishing?
+        run: ls -laR artifacts
+
+      # draft: false matters - a draft release is invisible to the updater.
+      - name: Publish the release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifacts/**/*
+          draft: false
+          generate_release_notes: true
