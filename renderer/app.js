@@ -311,7 +311,10 @@ function showUpdate(u) {
   } else box.hidden = true;   // current, error, idle: nothing to say
 }
 L.onUpdate(showUpdate);
-L.updateState().then(u => { if (u.state === 'downloading' || u.state === 'ready') showUpdate(u); });
+L.updateState().then(u => {
+  if (u.current) $('.brand p').textContent += ' · versie ' + u.current;   // so we always know which version is running
+  if (u.state === 'downloading' || u.state === 'ready') showUpdate(u);
+});
 $('#updateBtn').addEventListener('click', async () => {
   const r = await L.updateInstall();
   if (r && r.busy) $('#updateText').textContent = 'Eerst het luisterboek afmaken; daarna kun je herstarten.';
