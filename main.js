@@ -118,6 +118,8 @@ function attachLanguage(data, url) {
   // general list, minus the words the site or the user already handles
   site.general = language.loadGeneral([...Object.keys(site.user.map), ...Object.keys(site.say), ...(lex ? [...Object.keys(lex.o), ...Object.keys(lex.e)] : [])], app.getPath('userData'));
   data.lang = parts => language.runs(language.refine(parts, site), lex, site);
+  // Text the app writes itself (intro, outro) goes through the same pronunciation lists.
+  data.dutch = text => language.dutchText(language.refine([{ text, en: false }], site), lex, site);
   // also when everything goes through the Dutch voice (no English voice)
   for (const s of data.segs || []) {
     if (s.parts && !(s.kind === 'quote' && s.en)) s.text = language.dutchText(s.parts, lex, site);
@@ -151,7 +153,10 @@ async function renderChapter(r, ch, i, n, opts, book, tmp, extra = {}) {
     if (!coverFile && data.cover) { try { coverFile = await r.coverJpg(data.cover, out); } catch (e) {} }
   }
   send('log', `${title}: ${data.segs.length} stukken, ${nTips} fragmenten`);
-  const plan = await r.plan(data, opts, { first: i === 0, last: i === n - 1, book: { ...book, ...bookTexts(book, opts) }, limitSec: extra.limitSec });
+  const texts = bookTexts(book, opts);
+  // With the English voice on, render.js splits these texts itself; otherwise apply the lists here.
+  if (!opts.englishVoice) for (const k of ['introText', 'outroText']) texts[k] = data.dutch(texts[k]);
+  const plan = await r.plan(data, opts, { first: i === 0, last: i === n - 1, book: { ...book, ...texts }, limitSec: extra.limitSec });
   const pcm = path.join(tmp, `ch${String(i + 1).padStart(2, '0')}.pcm`);
   const frames = await r.mix(plan, pcm, 'mixen');
   if (extra.report) extra.report.timeline = plan.events.filter(e => e.kind !== 'stem').map(e => `${e.kind} ${(e.start / 44100).toFixed(1)}s +${(e.length / 44100).toFixed(1)}s`);
