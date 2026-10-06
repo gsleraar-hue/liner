@@ -364,7 +364,8 @@
   "uitspraak": {
     "_uitleg": "Spellings for the Dutch voice, on top of the site's data/uitspraak.json (which takes precedence). Left: the word in the text; right: how the voice should say it.",
     "rage": "raasje",
-    "Rage": "Raasje"
+    "Rage": "Raasje",
+    "Quarrymen": "Kwarriemen"
   },
   "afkortingEngels": [
     "*NSYNC",
@@ -384,5 +385,37 @@
     "4AD",
     "CC0",
     "BY-SA"
+  ],
+  "deelwoorden": [
+    {
+      "_uitleg": "The music group \"band\" is said \"bend\", also inside compounds (rockband, bandleider, bandje). These words are the Dutch \"band\" (tape, tyre, bond) and stay as they are.",
+      "van": "band",
+      "naar": "bend",
+      "behalve": [
+        "banden",
+        "bandrecorder",
+        "bandrecorders",
+        "geluidsband",
+        "geluidsbanden",
+        "plakband",
+        "bandlus",
+        "bandlussen",
+        "lopendebandwerk",
+        "lopende-bandwerk",
+        "familieband",
+        "familiebanden",
+        "FM-band",
+        "magneetband",
+        "magneetbanden",
+        "bandbreedte",
+        "verband",
+        "verbanden",
+        "bandiet",
+        "bandieten",
+        "aanbanden",
+        "vriendschapsband",
+        "vriendschapsbanden"
+      ]
+    }
   ]
 }

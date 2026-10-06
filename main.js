@@ -109,11 +109,22 @@ function bookTexts(book, opts) {
 // Language rules per site (lib/sites/<name>.json) plus the site's own pronunciation list.
 const hostOf = url => { try { return new URL(url).hostname.replace(/^www\./, '').split('.')[0]; } catch (e) { return 'site'; } };
 const userLexFile = url => path.join(app.getPath('userData'), 'uitspraak', hostOf(url) + '.json');
+// Copies of a site's own read-aloud files that Liner carries along (lib/sites/<name>-voorlezen.js and
+// <name>-uitspraak.json), used when the site itself no longer serves them.
+function siteFallback(url) {
+  const base = path.join(__dirname, 'lib', 'sites', hostOf(url));
+  const read = f => { try { return fs.readFileSync(base + f, 'utf8'); } catch (e) { return null; } };
+  const helper = read('-voorlezen.js'), lexText = read('-uitspraak.json');
+  if (!helper && !lexText) return null;
+  return { helper, lex: lexText ? JSON.parse(lexText) : null };
+}
 const loadUserLex = url => { try { return JSON.parse(fs.readFileSync(userLexFile(url), 'utf8')); } catch (e) { return {}; } };
 
 function attachLanguage(data, url) {
   const site = language.loadSite(hostOf(url));
-  site.user = language.userRules(loadUserLex(url));
+  // The app's own corrections for this site (lib/sites/<site>.json "uitspraak") and the user's own
+  // rules both go before the site's list; the user's rules win over the app's.
+  site.user = language.userRules({ ...site.say, ...loadUserLex(url) });
   const lex = language.lexicon(data.lex, site);
   // general list, minus the words the site or the user already handles
   site.general = language.loadGeneral([...Object.keys(site.user.map), ...Object.keys(site.say), ...(lex ? [...Object.keys(lex.o), ...Object.keys(lex.e)] : [])], app.getPath('userData'));
@@ -139,7 +150,7 @@ function resolveOpts(opts) {
 async function renderChapter(r, ch, i, n, opts, book, tmp, extra = {}) {
   const label = `Hoofdstuk ${i + 1} van ${n}`;
   send('progress', { label, phase: 'tekst ophalen', chapter: i, chapters: n });
-  const data = await runInPage(ch.url, extractChapterSource);
+  const data = await runInPage(ch.url, extractChapterSource(siteFallback(ch.url)));
   if (!data || !data.segs || data.segs.length < 2) throw new Error('Geen leesbare tekst gevonden op ' + ch.url);
   const title = data.kicker ? `${data.kicker}: ${data.title}` : (data.title || ch.title);
   r.onProgress = p => send('progress', { label, title, phase: p.phase, done: p.done, total: p.total, chapter: i, chapters: n });
@@ -232,6 +243,10 @@ ipcMain.handle('lexicon-list', async (e, url) => {
     const r = await fetch(new URL('/data/uitspraak.json', url));
     if (r.ok) { const u = await r.json(); site = { ...(u.engels || {}), ...(u.woorden || {}), ...(u.overal || {}) }; }
   } catch (err) {}
+  if (!Object.keys(site).length) {   // the site no longer serves its list: use the copy Liner carries
+    const fb = siteFallback(url);
+    if (fb && fb.lex) site = { ...(fb.lex.engels || {}), ...(fb.lex.woorden || {}), ...(fb.lex.overal || {}) };
+  }
   const own = language.loadSite(hostOf(url));
   return { host: hostOf(url), site: { ...language.loadGeneral([], app.getPath('userData')).list, ...site, ...own.say }, user: loadUserLex(url) };
 });
@@ -310,7 +325,7 @@ async function smoke() {
     const idx = await scanSite(url);
     report.index = { title: idx.title, author: idx.author, chapters: idx.chapters.filter(c => c.selected).map(c => c.url) };
     const ch = idx.chapters.find(c => c.selected && c.url !== url && (!process.env.LINER_CH || c.url.includes(process.env.LINER_CH))) || idx.chapters[0];
-    const data = await runInPage(ch.url, extractChapterSource);
+    const data = await runInPage(ch.url, extractChapterSource(siteFallback(ch.url)));
     report.chapter = { url: ch.url, title: data.title, kinds: data.segs.reduce((m, s) => (m[s.kind] = (m[s.kind] || 0) + 1, m), {}), noTrack: data.segs.filter(s => s.kind === 'tip' && !s.track).length, sample: data.segs.filter(s => s.kind !== 'p').slice(0, 8) };
     if (process.env.LINER_FULL) {
       const chosen = idx.chapters.filter(c => c.selected).slice(-2);
@@ -333,7 +348,7 @@ async function analyze() {
   const idx = await runInPage(DEFAULTS.url, scanIndexSource);
   const chapters = [];
   for (const c of idx.chapters.filter(c => c.selected)) {
-    const d = await runInPage(c.url, extractChapterSource);
+    const d = await runInPage(c.url, extractChapterSource(siteFallback(c.url)));
     chapters.push({ url: c.url, mixtape: d.mixtape, segs: d.segs.map(s => ({ kind: s.kind, parts: s.parts, byParts: s.byParts, en: s.en })) });
     console.log(c.url, d.segs.length);
   }
