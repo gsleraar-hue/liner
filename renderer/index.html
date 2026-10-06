@@ -36,7 +36,15 @@
     <section class="card">
       <h2>Stem</h2>
       <label>Verteller<select id="voice"></select></label>
-      <label class="check"><input type="checkbox" id="englishVoice"> Engelse namen en titels met een Engelse stem</label>
+      <label>Engelse namen en titels<select id="enMode">
+        <option value="lijst">Uitspraaklijst (Nederlandse spelling: Presslie)</option>
+        <option value="raw">Zoals geschreven (Presley)</option>
+        <option value="voice">Door een Engelse stem</option>
+      </select></label>
+      <label>Afkortingen<select id="acroStyle">
+        <option value="en">Engels (em-tie-vie, bie-bie-sie)</option>
+        <option value="nl">Nederlands (M-T-V, B-B-C)</option>
+      </select></label>
       <label class="indent">Stem voor Engelse namen<select id="voiceNames"></select></label>
       <label>Engelse citaten<select id="voiceEn"></select></label>
       <div class="row2">

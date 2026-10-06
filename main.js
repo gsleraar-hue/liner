@@ -12,7 +12,10 @@ const DEFAULTS = {
   url: 'https://sorock.nl/',
   voice: 'nl-NL-FennaNeural',
   voiceEn: 'en-GB-RyanNeural',
-  englishVoice: false,
+  // English names and titles: 'lijst' = Dutch respelling from the pronunciation lists,
+  // 'raw' = as written, 'voice' = read by an English voice
+  enMode: 'lijst',
+  acroStyle: 'en',   // acronyms: 'en' = English letter names (em-tie-vie), 'nl' = Dutch (M-T-V)
   voiceNames: 'auto',
   rate: 1,
   quotes: true,
@@ -36,6 +39,8 @@ const loadSettings = () => {
   try { s = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; } catch (e) { return { ...DEFAULTS }; }
   if (s.format) { s.saveBook = s.format !== 'mp3'; s.saveChapters = s.format === 'mp3'; delete s.format; }   // setting from before 0.2
   if (!s.v3) { s.englishVoice = false; s.v3 = true; }   // 0.3: one continuous voice by default; the English voice stays optional
+  if (!s.enMode) s.enMode = s.englishVoice ? 'voice' : 'lijst';   // 0.6: the checkbox became a three-way choice
+  delete s.englishVoice;
   return s;
 };
 const saveSettings = s => { try { fs.writeFileSync(settingsFile(), JSON.stringify(s, null, 2)); } catch (e) {} };
@@ -120,12 +125,19 @@ function siteFallback(url) {
 }
 const loadUserLex = url => { try { return JSON.parse(fs.readFileSync(userLexFile(url), 'utf8')); } catch (e) { return {}; } };
 
-function attachLanguage(data, url) {
+function attachLanguage(data, url, opts = {}) {
   const site = language.loadSite(hostOf(url));
   // The app's own corrections for this site (lib/sites/<site>.json "uitspraak") and the user's own
   // rules both go before the site's list; the user's rules win over the app's.
   site.user = language.userRules({ ...site.say, ...loadUserLex(url) });
-  const lex = language.lexicon(data.lex, site);
+  // No list from the page (or no page at all, as in the voice sample): use the copy Liner carries.
+  if (!data.lex || !Object.keys(data.lex.overal || {}).length) {
+    const fb = siteFallback(url);
+    if (fb && fb.lex) data.lex = { overal: { ...(fb.lex.woorden || {}), ...(fb.lex.overal || {}) }, engels: fb.lex.engels || {} };
+  }
+  // enMode "raw": English names and titles go to the voice as written; only acronyms are respelled.
+  const full = language.lexicon(data.lex, site, opts.acroStyle || 'en');
+  const lex = opts.enMode === 'raw' ? language.acronymsOnly(full) : full;
   // general list, minus the words the site or the user already handles
   site.general = language.loadGeneral([...Object.keys(site.user.map), ...Object.keys(site.say), ...(lex ? [...Object.keys(lex.o), ...Object.keys(lex.e)] : [])], app.getPath('userData'));
   data.lang = parts => language.runs(language.refine(parts, site), lex, site);
@@ -142,6 +154,7 @@ function attachLanguage(data, url) {
 // "Automatic": an English voice of the same gender as the narrator.
 function resolveOpts(opts) {
   const o = { ...opts };
+  o.englishVoice = o.enMode === 'voice';
   if (!o.voiceNames || o.voiceNames === 'auto') o.voiceNames = /Maarten|Arnaud/.test(o.voice) ? 'en-US-AndrewNeural' : 'en-US-AvaNeural';
   return o;
 }
@@ -155,7 +168,7 @@ async function renderChapter(r, ch, i, n, opts, book, tmp, extra = {}) {
   const title = data.kicker ? `${data.kicker}: ${data.title}` : (data.title || ch.title);
   r.onProgress = p => send('progress', { label, title, phase: p.phase, done: p.done, total: p.total, chapter: i, chapters: n });
   const nTips = data.segs.filter(s => s.kind === 'tip' && s.track).length;
-  attachLanguage(data, ch.url);
+  attachLanguage(data, ch.url, opts);
   // cover for this chapter: the page header, otherwise the background photo
   let coverFile = null;
   if (!extra.limitSec) {
@@ -278,12 +291,13 @@ ipcMain.handle('scan', async (e, url) => {
 ipcMain.handle('sample', async (e, { voice, rate, opts }) => {
   try {
     const nl = voice.startsWith('nl');
-    if (nl && opts && opts.englishVoice) {
-      // sample sentence with English names in it, via the same path as the audiobook
+    if (nl && opts) {
+      // sample sentence with English names in it, via the same path as the audiobook,
+      // so the sample shows the chosen way of saying English names
       const o = resolveOpts({ ...opts, voice, rate, fragments: false, bed: false, transitions: false, introOutro: false });
       const parts = [{ text: 'In 1965 nam ', en: false }, { text: 'Paul McCartney', en: true }, { text: ' het nummer ', en: false }, { text: 'Yesterday', en: true }, { text: ' op, met een strijkkwartet. Later draaide MTV de clip van ', en: false }, { text: 'Smells Like Teen Spirit', en: true }, { text: ' van ', en: false }, { text: 'Nirvana', en: true }, { text: '.', en: false }];
       const data = { segs: [{ kind: 'title', text: parts.map(p => p.text).join(''), parts }] };
-      attachLanguage(data, opts.url || DEFAULTS.url);
+      attachLanguage(data, opts.url || DEFAULTS.url, o);
       const r = new Renderer({ ffmpeg: findFfmpeg(), cacheDir: path.join(app.getPath('userData'), 'cache') });
       const plan = await r.plan(data, o, { first: false, last: false, book: {} });
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'liner-'));

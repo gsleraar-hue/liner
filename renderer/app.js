@@ -5,7 +5,7 @@ let book = null;            // { title, subtitle, author, cover, chapters: [...]
 let busy = false;
 let lastFile = null;
 
-const fields = ['voice', 'voiceEn', 'englishVoice', 'voiceNames', 'rate', 'quotes', 'tipsRead', 'fragments', 'fragLen', 'bed', 'bedVolume', 'transitions', 'introOutro', 'saveBook', 'saveChapters'];
+const fields = ['voice', 'voiceEn', 'enMode', 'acroStyle', 'voiceNames', 'rate', 'quotes', 'tipsRead', 'fragments', 'fragLen', 'bed', 'bedVolume', 'transitions', 'introOutro', 'saveBook', 'saveChapters'];
 
 function readOpts() {
   const o = { ...settings, url: $('#url').value.trim() };
@@ -26,8 +26,9 @@ function syncSliders() {
   $('#bedVolumeOut').textContent = Math.round($('#bedVolume').value * 100) + '%';
   $('#fragLen').closest('.slider').classList.toggle('disabled', !$('#fragments').checked);
   $('#bedVolume').closest('.slider').classList.toggle('disabled', !$('#bed').checked);
-  $('#voiceNames').closest('label').classList.toggle('disabled', !$('#englishVoice').checked);
-  $('#voiceNames').disabled = !$('#englishVoice').checked;
+  const enVoice = $('#enMode').value === 'voice';
+  $('#voiceNames').closest('label').classList.toggle('disabled', !enVoice);
+  $('#voiceNames').disabled = !enVoice;
 }
 function selected() { return book ? book.chapters.filter(c => c.selected) : []; }
 function updateBuild() {
@@ -177,7 +178,7 @@ $('#pick').addEventListener('click', async () => {
   const p = await L.pickFolder(settings.outDir);
   if (p) { settings.outDir = p; $('#outDir').textContent = p; $('#outDir').title = p; }
 });
-['fragments', 'bed', 'fragLen', 'bedVolume', 'englishVoice', 'saveBook', 'saveChapters'].forEach(id => $('#' + id).addEventListener('input', syncSliders));
+['fragments', 'bed', 'fragLen', 'bedVolume', 'enMode', 'saveBook', 'saveChapters'].forEach(id => $('#' + id).addEventListener('input', syncSliders));
 
 // ---------- start ----------
 (async () => {
@@ -186,7 +187,7 @@ $('#pick').addEventListener('click', async () => {
   for (const k of fields) {
     const el = $('#' + k);
     if (el.type === 'checkbox') el.checked = !!settings[k];
-    else if (el.tagName !== 'SELECT' || k === 'rate') el.value = settings[k];
+    else if (el.tagName !== 'SELECT' || k === 'rate' || k === 'enMode' || k === 'acroStyle') el.value = settings[k];
   }
   $('#rate').value = String(settings.rate);
   $('#outDir').textContent = settings.outDir; $('#outDir').title = settings.outDir;
