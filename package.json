@@ -1,7 +1,7 @@
 {
   "name": "liner",
   "productName": "Liner",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Turns a website into an audiobook with free Microsoft neural voices (Dutch/Flemish), with the music fragments mixed in",
   "main": "main.js",
   "private": true,

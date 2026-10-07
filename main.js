@@ -59,7 +59,7 @@ const loadSettings = () => {
   delete s.englishVoice;
   return s;
 };
-const saveSettings = s => { try { fs.writeFileSync(settingsFile(), JSON.stringify(s, null, 2)); } catch (e) {} };
+const saveSettings = s => { try { fs.writeFileSync(settingsFile(), JSON.stringify(s, null, 2)); } catch (e) { logError('settings', e.message); } };
 
 function findFfmpeg() {
   const bundled = path.join(process.resourcesPath || '', 'bin', 'ffmpeg.exe');
@@ -306,6 +306,7 @@ async function build(rawOpts, book, chapters, { preview } = {}) {
 function friendly(e) {
   if (e && e.cancelled) return { cancelled: true };
   let msg = (e && e.message) || String(e);
+  logError('melding', msg);   // what the user saw, so it can be read back afterwards
   if (/EPERM|EACCES/.test(msg)) msg += '\n\nWindows blokkeert schrijven in deze map (waarschijnlijk "Beheerde maptoegang" van Defender). Kies een andere map, bijvoorbeeld een map in je gebruikersmap buiten Documenten en Bureaublad.';
   return { error: msg };
 }
