@@ -16,7 +16,10 @@ Flemish voices. This README and the source code are in English.
 - **Fetch a site**: enter a web address; Liner finds the pages that look like chapters
   (for School of Rock: the thirteen mixtapes) and lets you choose which ones to include.
 - **Voices**: the free neural voices behind "Read aloud" in Microsoft Edge (Dutch:
-  Fenna, Colette, Maarten; Flemish: Dena, Arnaud). No API key needed.
+  Fenna, Colette, Maarten; Flemish: Dena, Arnaud). No API key needed. Or, with your own
+  ElevenLabs account (the free plan has 10,000 characters a month), an ElevenLabs voice: one
+  multilingual voice that reads the Dutch text and the English names and titles in it as
+  written. The key is stored encrypted on your computer and only sent to ElevenLabs.
 - **Pronunciation**: English names and titles are spelled the way a Dutch voice should say
   them, using the site's own pronunciation list plus your own corrections. A pronunciation
   window lets you try a spelling and hear it straight away. Optionally an English voice reads

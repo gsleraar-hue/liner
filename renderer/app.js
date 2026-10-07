@@ -5,7 +5,7 @@ let book = null;            // { title, subtitle, author, cover, chapters: [...]
 let busy = false;
 let lastFile = null;
 
-const fields = ['voice', 'voiceEn', 'enMode', 'acroStyle', 'voiceNames', 'rate', 'quotes', 'tipsRead', 'fragments', 'fragLen', 'bed', 'bedVolume', 'transitions', 'introOutro', 'saveBook', 'saveChapters'];
+const fields = ['engine', 'elModel', 'voice', 'voiceEn', 'enMode', 'acroStyle', 'voiceNames', 'rate', 'quotes', 'tipsRead', 'fragments', 'fragLen', 'bed', 'bedVolume', 'transitions', 'introOutro', 'saveBook', 'saveChapters'];
 
 function readOpts() {
   const o = { ...settings, url: $('#url').value.trim() };
@@ -14,7 +14,8 @@ function readOpts() {
     o[k] = el.type === 'checkbox' ? el.checked : (el.type === 'range' || k === 'rate') ? parseFloat(el.value) : el.value;
   }
   o.outDir = settings.outDir;
-  o.voiceLabel = ($('#voice').selectedOptions[0] || {}).dataset?.name || '';
+  o.elVoice = $('#elVoice').value || settings.elVoice || '';
+  o.voiceLabel = (o.engine === 'elevenlabs' ? ($('#elVoice').selectedOptions[0] || {}).dataset?.name : ($('#voice').selectedOptions[0] || {}).dataset?.name) || '';
   return o;
 }
 function readBook() {
@@ -138,8 +139,9 @@ $('#sample').addEventListener('click', async () => {
   if (busy) return;
   setBusy(true);
   showStatus('Stem', 'proefzin maken…');
-  const voice = $('#voice').value;
-  const r = await L.sample({ voice, rate: parseFloat($('#rate').value), opts: readOpts() });
+  const opts = readOpts();
+  const voice = opts.engine === 'elevenlabs' ? 'el:' + opts.elVoice : $('#voice').value;
+  const r = await L.sample({ voice, rate: parseFloat($('#rate').value), opts });
   setBusy(false);
   if (r.error) return showStatus('Stem mislukt', r.error);
   showStatus('Stem', $('#voice').selectedOptions[0].textContent);
@@ -187,11 +189,12 @@ $('#pick').addEventListener('click', async () => {
   for (const k of fields) {
     const el = $('#' + k);
     if (el.type === 'checkbox') el.checked = !!settings[k];
-    else if (el.tagName !== 'SELECT' || k === 'rate' || k === 'enMode' || k === 'acroStyle') el.value = settings[k];
+    else if (el.tagName !== 'SELECT' || ['rate', 'enMode', 'acroStyle', 'engine', 'elModel'].includes(k)) el.value = settings[k];
   }
   $('#rate').value = String(settings.rate);
   $('#outDir').textContent = settings.outDir; $('#outDir').title = settings.outDir;
   syncSliders();
+  showEngine();
 
   const fill = (sel, list, current) => {
     sel.innerHTML = '';
@@ -319,4 +322,56 @@ L.updateState().then(u => {
 $('#updateBtn').addEventListener('click', async () => {
   const r = await L.updateInstall();
   if (r && r.busy) $('#updateText').textContent = 'Eerst het luisterboek afmaken; daarna kun je herstarten.';
+});
+
+// ---------- ElevenLabs ----------
+// Show the right controls for the chosen voice service; for ElevenLabs, fetch voices and balance.
+function showEngine() {
+  const el = $('#engine').value === 'elevenlabs';
+  $('#elBox').hidden = !el;
+  $('#msBox').hidden = el;
+  if (el) loadEl();
+}
+function elStatus(text, kind) {
+  const p = $('#elStatus');
+  p.textContent = text;
+  p.className = 'muted small' + (kind ? ' ' + kind : '');
+}
+let elLoaded = false;
+async function loadEl(force) {
+  if (elLoaded && !force) return;
+  elStatus('Stemmen ophalen…');
+  const r = await L.elInfo();
+  if (!r.hasKey) { elStatus('Maak gratis een account op elevenlabs.io (10.000 tekens per maand) en plak hierboven je API-sleutel.'); return; }
+  if (r.error) { elStatus(r.error, 'bad'); return; }
+  elLoaded = true;
+  $('#elKey').placeholder = 'opgeslagen (versleuteld)';
+  const sel = $('#elVoice');
+  sel.innerHTML = '';
+  // voices that list Dutch first
+  const dutch = v => (v.languages || []).some(l => /^nl|dutch/i.test(l)) || /dutch|flemish|nederlands|vlaams/i.test(JSON.stringify(v.labels || {}));
+  const voices = [...r.voices].sort((a, b) => (dutch(b) - dutch(a)) || a.name.localeCompare(b.name));
+  for (const v of voices) {
+    const o = document.createElement('option');
+    o.value = v.id; o.dataset.name = v.name;
+    const l = v.labels || {};
+    o.textContent = [v.name, dutch(v) ? 'Nederlands' : '', l.gender, l.accent].filter(Boolean).join(' · ');
+    sel.appendChild(o);
+  }
+  if (settings.elVoice && voices.some(v => v.id === settings.elVoice)) sel.value = settings.elVoice;
+  if (r.sub && r.sub.limit) {
+    const left = Math.max(0, r.sub.limit - r.sub.used);
+    elStatus(`Tegoed: ${left.toLocaleString('nl-NL')} van ${r.sub.limit.toLocaleString('nl-NL')} tekens over deze periode. Een voorbeeld kost zo'n 2.000 à 2.500 tekens.`, 'ok');
+  } else elStatus(`${voices.length} stemmen gevonden.`, 'ok');
+}
+$('#engine').addEventListener('change', showEngine);
+$('#elVoice').addEventListener('change', () => { settings.elVoice = $('#elVoice').value; });
+$('#elKeySave').addEventListener('click', async () => {
+  const key = $('#elKey').value.trim();
+  if (!key) return;
+  elStatus('Sleutel controleren…');
+  const r = await L.elKey(key);
+  if (r.error) { elStatus(r.error, 'bad'); return; }
+  $('#elKey').value = '';
+  await loadEl(true);
 });

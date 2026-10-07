@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -8,8 +8,23 @@ const { Renderer } = require('./lib/render');
 const tts = require('./lib/edge-tts');
 const language = require('./lib/language');
 const { findPreview } = require('./lib/itunes');
+const elevenlabs = require('./lib/elevenlabs');
+
+// The ElevenLabs API key, encrypted with Windows' own data protection (safeStorage); it is only
+// ever decrypted here in the main process and only sent to ElevenLabs.
+const elKeyFile = () => path.join(app.getPath('userData'), 'elevenlabs.key');
+function loadElKey() {
+  try { return safeStorage.decryptString(fs.readFileSync(elKeyFile())); } catch (e) { return ''; }
+}
+function saveElKey(key) {
+  if (!key) { fs.rmSync(elKeyFile(), { force: true }); return; }
+  fs.writeFileSync(elKeyFile(), safeStorage.encryptString(key));
+}
 
 const DEFAULTS = {
+  engine: 'microsoft',      // 'microsoft' (free Edge voices) or 'elevenlabs' (paid, own API key)
+  elVoice: '',              // ElevenLabs voice id
+  elModel: 'eleven_v4',     // or 'eleven_multilingual_v2'
   url: 'https://sorock.nl/',
   voice: 'nl-NL-FennaNeural',
   voiceEn: 'en-GB-RyanNeural',
@@ -131,6 +146,18 @@ const loadUserLex = url => { try { return JSON.parse(fs.readFileSync(userLexFile
 
 function attachLanguage(data, url, opts = {}) {
   const site = language.loadSite(hostOf(url));
+  // ElevenLabs reads Dutch and English itself: the text goes as written, with only the user's own
+  // rules. The respelling lists were made for the Microsoft voices and would only get in the way.
+  if (opts.engine === 'elevenlabs') {
+    site.user = language.userRules(loadUserLex(url));
+    data.lang = null;
+    data.dutch = text => language.plainText([{ text, en: false }], site);
+    for (const s of data.segs || []) {
+      if (s.parts && !(s.kind === 'quote' && s.en)) s.text = language.plainText(s.parts, site);
+      if (s.byParts) s.by = language.plainText(s.byParts, site);
+    }
+    return;
+  }
   // The app's own corrections for this site (lib/sites/<site>.json "uitspraak") and the user's own
   // rules both go before the site's list; the user's rules win over the app's.
   site.user = language.userRules({ ...site.say, ...loadUserLex(url) });
@@ -158,6 +185,13 @@ function attachLanguage(data, url, opts = {}) {
 // "Automatic": an English voice of the same gender as the narrator.
 function resolveOpts(opts) {
   const o = { ...opts };
+  if (o.engine === 'elevenlabs') {
+    // one multilingual voice for everything, English quotes included
+    o.voice = 'el:' + o.elVoice;
+    o.voiceEn = o.voice;
+    o.englishVoice = false;
+    return o;
+  }
   o.englishVoice = o.enMode === 'voice';
   if (!o.voiceNames || o.voiceNames === 'auto') o.voiceNames = /Maarten|Arnaud/.test(o.voice) ? 'en-US-AndrewNeural' : 'en-US-AvaNeural';
   return o;
@@ -204,17 +238,28 @@ async function renderChapter(r, ch, i, n, opts, book, tmp, extra = {}) {
   return { pcm, frames, title, cover: coverFile };
 }
 
+// Settings for the Renderer when the narrator is an ElevenLabs voice.
+function elConfig(opts) {
+  if (opts.engine !== 'elevenlabs') return null;
+  const key = loadElKey();
+  if (!key) throw new Error('Vul eerst je ElevenLabs-sleutel in (bij Stem).');
+  if (!opts.elVoice) throw new Error('Kies eerst een ElevenLabs-stem.');
+  return { key, model: opts.elModel || 'eleven_v4' };
+}
+
 async function build(rawOpts, book, chapters, { preview } = {}) {
   const opts = resolveOpts(rawOpts);
-  const r = new Renderer({ ffmpeg: findFfmpeg(), cacheDir: path.join(app.getPath('userData'), 'cache'), onLog: m => send('log', m) });
+  const r = new Renderer({ ffmpeg: findFfmpeg(), cacheDir: path.join(app.getPath('userData'), 'cache'), onLog: m => send('log', m), elevenlabs: elConfig(opts) });
   job = r;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'liner-'));
+  const paidNote = () => { if (r.el) send('log', `ElevenLabs: ${r.paidChars.toLocaleString('nl-NL')} tekens gebruikt (al eerder gemaakte stukken kosten niets).`); };
   try {
     if (preview) {
       const res = await renderChapter(r, chapters[0], preview.first ? 0 : 1, preview.first ? 1 : 3, opts, book, tmp, { limitSec: 150, report: preview.report });
       const out = path.join(app.getPath('userData'), 'cache', `voorbeeld-${Date.now()}.mp3`);
       for (const old of fs.readdirSync(path.dirname(out)).filter(x => x.startsWith('voorbeeld-'))) fs.rmSync(path.join(path.dirname(out), old), { force: true });
       await r.encode(res.pcm, out, { format: 'mp3' });
+      paidNote();
       return { file: out };
     }
 
@@ -250,6 +295,7 @@ async function build(rawOpts, book, chapters, { preview } = {}) {
       result = path.join(opts.outDir, name + '.m4b');
       await r.m4b(parts, result, { title: book.title, author: book.author, cover, tmp });
     }
+    paidNote();
     return { file: result };
   } finally {
     job = null;
@@ -302,12 +348,31 @@ ipcMain.handle('voices', async () => {
     return all.filter(v => /^(nl|en)-/.test(v.Locale)).map(v => ({ id: v.ShortName, locale: v.Locale, gender: v.Gender, name: v.ShortName.split('-')[2].replace(/Neural$/, '') }));
   } catch (e) { return { error: e.message }; }
 });
+// ElevenLabs: store the key (after checking it), and fetch voices and remaining balance for the window.
+ipcMain.handle('el-key', async (e, key) => {
+  key = (key || '').trim();
+  try {
+    if (!key) { saveElKey(''); return { ok: true, cleared: true }; }
+    const sub = await elevenlabs.subscription(key);   // throws on a wrong key
+    saveElKey(key);
+    return { ok: true, sub };
+  } catch (err) { return friendly(err); }
+});
+ipcMain.handle('el-info', async () => {
+  const key = loadElKey();
+  if (!key) return { hasKey: false };
+  try {
+    const [voices, sub] = await Promise.all([elevenlabs.listVoices(key), elevenlabs.subscription(key).catch(() => null)]);
+    return { hasKey: true, voices, sub };
+  } catch (err) { return { hasKey: true, ...friendly(err) }; }
+});
+
 ipcMain.handle('scan', async (e, url) => {
   try { return await scanSite(url); } catch (err) { return friendly(err); }
 });
 ipcMain.handle('sample', async (e, { voice, rate, opts }) => {
   try {
-    const nl = voice.startsWith('nl');
+    const nl = voice.startsWith('nl') || voice.startsWith('el:');
     if (nl && opts) {
       // sample sentence with English names in it, via the same path as the audiobook,
       // so the sample shows the chosen way of saying English names
@@ -315,7 +380,7 @@ ipcMain.handle('sample', async (e, { voice, rate, opts }) => {
       const parts = [{ text: 'In 1965 nam ', en: false }, { text: 'Paul McCartney', en: true }, { text: ' het nummer ', en: false }, { text: 'Yesterday', en: true }, { text: ' op, met een strijkkwartet. Later draaide MTV de clip van ', en: false }, { text: 'Smells Like Teen Spirit', en: true }, { text: ' van ', en: false }, { text: 'Nirvana', en: true }, { text: '.', en: false }];
       const data = { segs: [{ kind: 'title', text: parts.map(p => p.text).join(''), parts }] };
       attachLanguage(data, opts.url || DEFAULTS.url, o);
-      const r = new Renderer({ ffmpeg: findFfmpeg(), cacheDir: path.join(app.getPath('userData'), 'cache') });
+      const r = new Renderer({ ffmpeg: findFfmpeg(), cacheDir: path.join(app.getPath('userData'), 'cache'), elevenlabs: elConfig(o) });
       const plan = await r.plan(data, o, { first: false, last: false, book: {} });
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'liner-'));
       const out = path.join(app.getPath('userData'), `stem-${Date.now()}.mp3`);
