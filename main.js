@@ -71,7 +71,22 @@ function findFfmpeg() {
 
 // Load pages in a hidden window, so pages built with JavaScript work too.
 let reader = null;
+// An error page from the server (404, or GitHub's "Unicorn!" page when GitHub Pages is overloaded)
+// must not become a chapter: try again a few times, then stop with a clear message.
 async function runInPage(url, source) {
+  let last;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try { return await loadInPage(url, source); }
+    catch (e) {
+      last = e;
+      if (!e.httpStatus || e.httpStatus === 404) throw e;   // a missing page will not come back
+      logError('reader', `${url}: ${e.message} (poging ${attempt})`);
+      await new Promise(r => setTimeout(r, 5000 * attempt));
+    }
+  }
+  throw last;
+}
+async function loadInPage(url, source) {
   if (!reader || reader.isDestroyed()) {
     // offscreen: the page then paints without a visible window, needed for the cover capture
     reader = new BrowserWindow({ show: false, width: 800, height: 800, useContentSize: true, webPreferences: { offscreen: true, backgroundThrottling: false } });
@@ -82,7 +97,9 @@ async function runInPage(url, source) {
     r.webContents.on('render-process-gone', (e, d) => { logError('reader', `${d.reason} (exit ${d.exitCode})`); if (!r.isDestroyed()) r.destroy(); if (reader === r) reader = null; });
   }
   const wc = reader.webContents;
-  let onLoad, onFail, t;
+  let onLoad, onFail, t, status = 0;
+  const onNav = (e, u, code) => { status = code; };
+  wc.once('did-navigate', onNav);
   const loaded = new Promise((resolve, reject) => {
     t = setTimeout(() => reject(new Error('Pagina laadt niet binnen 40 seconden: ' + url)), 40000);
     onLoad = () => resolve();
@@ -91,7 +108,15 @@ async function runInPage(url, source) {
     wc.once('did-fail-load', onFail);
   }).finally(() => { clearTimeout(t); wc.removeListener('did-finish-load', onLoad); wc.removeListener('did-fail-load', onFail); });
   await reader.loadURL(url).catch(() => {});
-  await loaded;
+  try { await loaded; } finally { wc.removeListener('did-navigate', onNav); }
+  const title = wc.getTitle();
+  if (status >= 400 || /^Unicorn!|Page not found|404 Not Found/i.test(title)) {
+    const err = new Error(status >= 400
+      ? `De site gaf een foutpagina (HTTP ${status}) voor ${url}${/Unicorn/i.test(title) ? ' - GitHub had een storing' : ''}. Probeer het straks opnieuw.`
+      : `De site gaf een foutpagina ("${title}") voor ${url}. Probeer het straks opnieuw.`);
+    err.httpStatus = status || 503;
+    throw err;
+  }
   await new Promise(r => setTimeout(r, 700));
   return reader.webContents.executeJavaScript(source, true);
 }
