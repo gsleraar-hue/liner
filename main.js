@@ -441,7 +441,7 @@ async function smoke() {
 // Dev helper: read all chapters and write out the language split (npm start -- --analyze <output.json>).
 async function analyze() {
   const outFile = process.argv[process.argv.indexOf('--analyze') + 1];
-  const idx = await runInPage(DEFAULTS.url, scanIndexSource);
+  const idx = await runInPage(process.argv.find(a => /^https?:/.test(a)) || DEFAULTS.url, scanIndexSource);
   const chapters = [];
   for (const c of idx.chapters.filter(c => c.selected)) {
     const d = await runInPage(c.url, extractChapterSource(siteFallback(c.url)));

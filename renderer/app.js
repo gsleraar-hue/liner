@@ -342,7 +342,7 @@ async function loadEl(force) {
   if (elLoaded && !force) return;
   elStatus('Stemmen ophalen…');
   const r = await L.elInfo();
-  if (!r.hasKey) { elStatus('Maak gratis een account op elevenlabs.io (10.000 tekens per maand) en plak hierboven je API-sleutel.'); return; }
+  if (!r.hasKey) { elStatus('Maak gratis een account op elevenlabs.io (10.000 credits per maand) en plak hierboven je API-sleutel.'); return; }
   if (r.error) { elStatus(r.error, 'bad'); return; }
   elLoaded = true;
   $('#elKey').placeholder = 'opgeslagen (versleuteld)';
@@ -361,7 +361,8 @@ async function loadEl(force) {
   if (settings.elVoice && voices.some(v => v.id === settings.elVoice)) sel.value = settings.elVoice;
   if (r.sub && r.sub.limit) {
     const left = Math.max(0, r.sub.limit - r.sub.used);
-    elStatus(`Tegoed: ${left.toLocaleString('nl-NL')} van ${r.sub.limit.toLocaleString('nl-NL')} tekens over deze periode. Een voorbeeld kost zo'n 2.000 à 2.500 tekens.`, 'ok');
+    // ElevenLabs counts credits: Multilingual v2 costs 1 credit per character, Eleven v4 about 0.11 (Oct 2026)
+    elStatus(`Tegoed: ${left.toLocaleString('nl-NL')} van ${r.sub.limit.toLocaleString('nl-NL')} credits deze periode. Een voorbeeld kost met Eleven v4 zo'n 300 credits, met Multilingual v2 zo'n 2.500.`, 'ok');
   } else elStatus(`${voices.length} stemmen gevonden.`, 'ok');
 }
 $('#engine').addEventListener('change', showEngine);
