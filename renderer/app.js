@@ -376,3 +376,46 @@ $('#elKeySave').addEventListener('click', async () => {
   $('#elKey').value = '';
   await loadEl(true);
 });
+
+// ---------- clean-up ----------
+const mb = b => b >= 1024 ** 3 ? (b / 1024 ** 3).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' GB' : Math.round(b / 1024 ** 2).toLocaleString('nl-NL') + ' MB';
+let cleanParts = [];
+function cleanSum() {
+  const keys = [...document.querySelectorAll('#cleanRows input:checked')].map(i => i.value);
+  const bytes = cleanParts.filter(p => keys.includes(p.key)).reduce((a, p) => a + p.bytes, 0);
+  const all = cleanParts.reduce((a, p) => a + p.bytes, 0);
+  $('#cleanTotal').textContent = `Totaal ${mb(all)} · aangevinkt ${mb(bytes)}`;
+  $('#cleanGo').disabled = !keys.length || busy;
+  return keys;
+}
+async function cleanLoad() {
+  $('#cleanRows').innerHTML = '<p class="muted">Meten…</p>';
+  $('#cleanGo').disabled = true;
+  cleanParts = await L.cacheReport();
+  const box = $('#cleanRows'); box.innerHTML = '';
+  for (const p of cleanParts) {
+    const row = document.createElement('label');
+    row.className = 'cleanRow' + (p.key === 'paid' ? ' paid' : '');
+    row.innerHTML = '<input type="checkbox"><span class="label"></span><span class="size"></span>';
+    row.querySelector('input').value = p.key;
+    row.querySelector('input').checked = p.checked && p.bytes > 0;
+    row.querySelector('.label').textContent = p.label;
+    row.querySelector('.size').textContent = p.bytes ? mb(p.bytes) : 'leeg';
+    row.querySelector('input').addEventListener('change', cleanSum);
+    box.appendChild(row);
+  }
+  cleanSum();
+}
+$('#cleanOpen').addEventListener('click', () => { $('#cleanDlg').showModal(); cleanLoad(); });
+$('#cleanClose').addEventListener('click', () => $('#cleanDlg').close());
+$('#cleanGo').addEventListener('click', async () => {
+  const keys = cleanSum();
+  if (keys.includes('paid') && !confirm('Spraak van ElevenLabs verwijderen? Opnieuw maken kost dan weer credits.')) return;
+  $('#cleanGo').disabled = true;
+  $('#cleanTotal').textContent = 'Opruimen…';
+  const r = await L.cacheClean(keys);
+  if (r.busy) { $('#cleanTotal').textContent = 'Er wordt nu een luisterboek gemaakt; ruim op als dat klaar is.'; return; }
+  if (r.error) { $('#cleanTotal').textContent = r.error; return; }
+  await cleanLoad();
+  $('#cleanTotal').textContent = `${mb(r.freed)} vrijgemaakt. ` + $('#cleanTotal').textContent;
+});

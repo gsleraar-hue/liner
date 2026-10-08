@@ -122,3 +122,10 @@ label > input:not([type=checkbox]):not([type=radio]):not([type=range]), label > 
 .small { font-size: 12px; margin: -4px 0 10px; }
 .small.ok { color: #3C7A4A; }
 .small.bad { color: var(--accent); }
+
+/* Clean-up window */
+.cleanRow { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer; }
+.cleanRow input { accent-color: var(--accent); margin: 0; }
+.cleanRow .size { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cleanRow.paid .label { color: var(--accent); }
+.cleanFoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

@@ -9,6 +9,7 @@ const tts = require('./lib/edge-tts');
 const language = require('./lib/language');
 const { findPreview } = require('./lib/itunes');
 const elevenlabs = require('./lib/elevenlabs');
+const cleanup = require('./lib/cleanup');
 
 // The ElevenLabs API key, encrypted with Windows' own data protection (safeStorage); it is only
 // ever decrypted here in the main process and only sent to ElevenLabs.
@@ -325,6 +326,7 @@ async function build(rawOpts, book, chapters, { preview } = {}) {
   } finally {
     job = null;
     fs.rmSync(tmp, { recursive: true, force: true });
+    cleanup.prunePcm(app.getPath('userData')).catch(e => logError('cleanup', e.message));
   }
 }
 
@@ -391,6 +393,17 @@ ipcMain.handle('el-info', async () => {
     const [voices, sub] = await Promise.all([elevenlabs.listVoices(key), elevenlabs.subscription(key).catch(() => null)]);
     return { hasKey: true, voices, sub };
   } catch (err) { return { hasKey: true, ...friendly(err) }; }
+});
+
+// Clean-up window: sizes per part, and clearing the parts the user ticked (never during a build).
+ipcMain.handle('cache-report', () => cleanup.report(app.getPath('userData')));
+ipcMain.handle('cache-clean', async (e, keys) => {
+  if (job) return { busy: true };
+  try {
+    const freed = await cleanup.clean(app.getPath('userData'), keys, require('electron').session.defaultSession);
+    if (reader && !reader.isDestroyed()) { reader.destroy(); reader = null; }   // starts fresh without the old browser cache
+    return { freed };
+  } catch (err) { return friendly(err); }
 });
 
 ipcMain.handle('scan', async (e, url) => {
@@ -516,6 +529,8 @@ app.whenReady().then(() => {
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   setupUpdater();
+  // keep the unpacked sound in check, also for caches that grew big before this existed
+  setTimeout(() => { if (!job) cleanup.prunePcm(app.getPath('userData')).catch(e => logError('cleanup', e.message)); }, 20000);
   win.on('closed', () => { win = null; if (job) job.cancel(); app.quit(); });
   // A crashed or frozen page: log it, and bring the window back instead of leaving it blank.
   win.webContents.on('render-process-gone', (e, d) => {

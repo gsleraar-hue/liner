@@ -89,6 +89,7 @@
       <label class="check"><input type="checkbox" id="saveChapters"> Losse hoofdstukken (mp3, elk met eigen cover)</label>
       <div class="folder"><span id="outDir" class="path"></span><button type="button" class="link" id="pick">wijzig</button></div>
       <button type="button" class="btn big" id="build" disabled>Maak luisterboek</button>
+      <button type="button" class="btn ghost wide" id="cleanOpen">Opruimen…</button>
     </section>
   </aside>
 </main>
@@ -106,6 +107,18 @@
   </div>
   <pre id="log" class="log" hidden></pre>
 </footer>
+
+<dialog id="cleanDlg" class="lex">
+  <div class="lexHead">
+    <div><h2>Opruimen</h2><p class="muted">Wat Liner bewaart om sneller te werken. Alles kan opnieuw worden gemaakt; alleen spraak van ElevenLabs kost dan opnieuw credits. Je luisterboeken zelf blijven staan.</p></div>
+    <button type="button" class="link" id="cleanClose">sluiten</button>
+  </div>
+  <div class="lexRows" id="cleanRows"><p class="muted">Meten…</p></div>
+  <div class="lexFoot cleanFoot">
+    <span id="cleanTotal" class="muted"></span>
+    <button type="button" class="btn" id="cleanGo" disabled>Opruimen</button>
+  </div>
+</dialog>
 
 <dialog id="lexDlg" class="lex">
   <div class="lexHead">

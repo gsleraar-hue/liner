@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('liner', {
   onUpdate: fn => ipcRenderer.on('update', (e, d) => fn(d)),
   elKey: key => ipcRenderer.invoke('el-key', key),
   elInfo: () => ipcRenderer.invoke('el-info'),
+  cacheReport: () => ipcRenderer.invoke('cache-report'),
+  cacheClean: keys => ipcRenderer.invoke('cache-clean', keys),
   fileUrl: p => pathToFileURL(p).href,
   onProgress: fn => ipcRenderer.on('progress', (e, d) => fn(d)),
   onLog: fn => ipcRenderer.on('log', (e, d) => fn(d))
